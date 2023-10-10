@@ -1,0 +1,175 @@
+const Note = require("../models/Notes");
+const mongoose = require("mongoose");
+
+/**
+ * GET @Dashboard
+ */
+
+exports.dashboard = async (req, res) => {
+
+  let perPage = 12;
+  let page = req.query.page || 1
+
+  
+  const locals = {
+    title: "Dashboard",
+    description: "Free NodeJs Note taking app",
+  };
+
+  try {
+       
+      // Mongoose "^7.0.0 Update
+    const notes = await Note.aggregate([
+      { $sort: { updatedAt: -1 } },
+      { $match: { user: new mongoose.Types.ObjectId(req.user.id) } },
+      {
+        $project: {
+          title: { $substr: ["$title", 0, 30] },
+          body: { $substr: ["$body", 0, 100] },
+        },
+      },
+    ])
+    .skip(perPage * page - perPage)
+    .limit(perPage)
+    .exec();
+
+    const count = await Note.count();
+
+    res.render('dashboard/index', {
+      userName: req.user.firstName,
+      locals,
+      notes,
+      layout: "../views/layout/dashboard",
+      current: page,
+      pages: Math.ceil(count / perPage)
+    });
+
+  } catch (error) {
+       console.log(error); 
+  }
+};
+
+
+/**
+ * GET /
+ * @view specific note
+ */
+
+exports.dashboardViewNote = async (req, res) =>{
+  const note = await Note.findById({ _id: req.params.id })
+  .where({ user: req.user.id })
+  .lean();
+
+  if(note){
+    res.render('dashboard/view-note', {
+      noteId : req.params.id,
+      note,
+      layout: '../views/layout/dashboard'
+    });
+  } else {
+    res.send("Something went wrong!");
+  }
+}
+
+/**
+ * PUT /
+ * @update specific note
+ */
+
+exports.dashboardUpdateNote = async (req, res) =>{
+  try {
+    await Note.findOneAndUpdate(
+      { _id: req.params.id },
+      { title: req.body.title, body: req.body.body, updatedAt: Date.now() }
+      ).where( { user: req.user.id } );
+      res.redirect('/dashboard');
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+
+/**
+ * Delete /
+ * @delete specific note
+ */
+
+exports.dashboardDeleteNote = async (req, res) =>{
+  try {
+    await Note.deleteOne({ _id: req.params.id }).where({ user: req.user.id });
+    res.redirect('/dashboard');
+  } catch (error) {
+    console.log(error)
+  }
+}
+
+
+/**
+ * GET /
+ * @Add notes
+ */
+
+exports.dashboardAddNote = async (req, res) =>{
+ res.render('dashboard/add', {
+  layout: '../views/layout/dashboard'
+ });
+};
+
+/**
+ * POST /
+ * @Add specific note
+ */
+
+exports.dashboardAddNoteSubmit = async (req, res) =>{
+  try {
+    req.body.user = req.user.id;
+    await Note.create(req.body);
+    res.redirect("/dashboard");
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+
+/**
+ * GET
+ * @Search
+ */
+
+exports.dashboardSearch = async (req, res) =>{
+  try {
+    res.render('dashboard/search', {
+      searchResult: '',
+      layout: '../views/layout/dashboard'
+    })
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+/**
+ * POST
+ * @Search
+ */
+
+exports.dashboardSearchSubmit = async (req, res) => {
+  try {
+    let searchTerm = req.body.searchTerm;
+    const searchNoSpecialChars = searchTerm.replace(/[^a-zA-z0-9 ]/g, "");
+    const searchResult = await Note.find({
+      $or: [
+        { title: { $regex: new RegExp(searchNoSpecialChars, "i") }},
+        { body: { $regex: new RegExp(searchNoSpecialChars, "i") }}
+
+      ]
+    }).where({ user: req.user.id });
+
+    res.render('dashboard/search', {
+      searchResult,
+      layout: '../views/layout/dashboard'
+    })
+    
+  } catch (error) {
+    console.log(error);
+  }
+}
