@@ -11,7 +11,7 @@ const MongoStore = require('connect-mongo');
 const app = express();
 const port = 5001 || process.env.PORT;
 
-//create session
+//create session!
 
 app.use(session({
     secret: 'tomboys',
